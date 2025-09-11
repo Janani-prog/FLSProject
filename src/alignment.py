@@ -352,7 +352,17 @@ class AlignmentProcessor:
         
         print(f"Alignment quality: {alignment_quality}")
         print("="*60)
-        
+
+        #edited
+        final_center = final_aligned.get_center()
+        ref_center = reference_pcd.get_center()
+        offset = ref_center - final_center
+        if np.linalg.norm(offset) > 1e-3:  # More precise: less than 1 mm error allowed
+            print(f"Applying final center correction: {offset}")
+            final_aligned = final_aligned.translate(offset)
+            # CHECK again: now centers should be identical (within floating-point limits)!
+            print(f"New center after correction: {final_aligned.get_center()} vs ref {ref_center}")
+
         return final_aligned
     
     def apply_complete_alignment_with_fixed_scaling(self, reference_pcd: o3d.geometry.PointCloud,
