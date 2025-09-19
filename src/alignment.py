@@ -1,10 +1,3 @@
-"""
-Alignment Algorithms for Mill Analysis Project
-Open3D implementation - Complete Enhanced Version with Built-in Post-Processing ICP
-Implements center alignment, PCA axis alignment, Z-axis alignment, ICP refinement, and automatic inner-scan ICP
-ENHANCED: Added fixed scaling, post-processing ICP, and dual-scan management as built-in features
-"""
-
 import open3d as o3d
 import numpy as np
 import copy
@@ -21,26 +14,22 @@ def manual_gap_xyz_alignment(reference_pcd, scan_pcd):
     ref_pts = np.asarray(reference_pcd.points)
     scan_pts = np.asarray(scan_pcd.points)
 
-    # X-axis center
+    # X-axis center (equal gaps left/right)
     x_center_ref = (ref_pts[:, 0].min() + ref_pts[:, 0].max()) / 2
     x_center_scan = (scan_pts[:, 0].min() + scan_pts[:, 0].max()) / 2
     x_shift = x_center_ref - x_center_scan
 
-    # Y-axis center (use if necessary for symmetry)
-    y_center_ref = (ref_pts[:, 1].min() + ref_pts[:, 1].max()) / 2
-    y_center_scan = (scan_pts[:, 1].min() + scan_pts[:, 1].max()) / 2
-    y_shift = y_center_ref - y_center_scan
+    # Z-axis top surface alignment (level at top)
+    ref_top_z = np.mean(ref_pts[ref_pts[:, 2] >= np.percentile(ref_pts[:, 2], 95)][:, 2])
+    scan_top_z = np.mean(scan_pts[scan_pts[:, 2] >= np.percentile(scan_pts[:, 2], 95)][:, 2])
+    z_shift = ref_top_z - scan_top_z
 
-    # Z-axis center
-    ref_z_center = (ref_pts[:, 2].min() + ref_pts[:, 2].max()) / 2
-    scan_z_center = (scan_pts[:, 2].min() + scan_pts[:, 2].max()) / 2
-    z_shift = ref_z_center - scan_z_center
-
-    print(f"Translation applied: x={x_shift:.2f}, y={y_shift:.2f}, z={z_shift:.2f}")
-
+    # Apply translation
     new_pcd = copy.deepcopy(scan_pcd)
-    new_pcd = new_pcd.translate([x_shift, y_shift, z_shift])
+    new_pcd = new_pcd.translate([x_shift, 0, z_shift])
+
     return new_pcd
+
 
 class AlignmentProcessor:
     """Complete enhanced alignment processor with all features built-in."""
@@ -158,7 +147,9 @@ class AlignmentProcessor:
                 print(f"Reference top surface Z: {ref_top_z:.1f}mm")
                 print(f"Inner top surface Z: {inner_top_z:.1f}mm")
                 
-                height_adjustment = ref_top_z - inner_top_z
+                #edited
+                lower_by = 21.75
+                height_adjustment = ref_top_z - inner_top_z - lower_by
                 translation = np.array([0, 0, height_adjustment])
                 
                 z_aligned_pcd = copy.deepcopy(center_aligned_pcd)
@@ -355,38 +346,35 @@ class AlignmentProcessor:
             print(f"WARNING: ICP failed ({e}), using axis alignment")
             return axis_aligned_pcd
     
-    #edited
     def apply_complete_alignment(self, reference_pcd: o3d.geometry.PointCloud,
-                            scaled_inner_pcd: o3d.geometry.PointCloud) -> o3d.geometry.PointCloud:
+                               scaled_inner_pcd: o3d.geometry.PointCloud) -> o3d.geometry.PointCloud:
+        """Apply complete alignment pipeline: Center -> Z-axis -> PCA -> ICP."""
         print("\n" + "="*60)
         print("APPLYING COMPLETE ALIGNMENT PIPELINE")
         print("="*60)
-
+        
         center_aligned = self.apply_center_alignment(reference_pcd, scaled_inner_pcd)
         z_axis_aligned = self.apply_z_axis_alignment(reference_pcd, center_aligned)
-
-        # Apply edge-based bounding box + top alignment
-        edge_aligned = manual_gap_xyz_alignment(reference_pcd, z_axis_aligned)
-
-        axis_aligned = self.apply_pca_axis_alignment(reference_pcd, edge_aligned)
+        z_axis_aligned = manual_gap_xyz_alignment(reference_pcd, z_axis_aligned)
+        axis_aligned = self.apply_pca_axis_alignment(reference_pcd, z_axis_aligned)
         final_aligned = self.apply_icp_refinement(reference_pcd, axis_aligned)
-
+        
         ref_center = reference_pcd.get_center()
         final_center = final_aligned.get_center()
         center_accuracy = np.linalg.norm(final_center - ref_center)
-
+        
         print(f"\nCOMPLETE ALIGNMENT SUMMARY:")
         print(f"Final center accuracy: {center_accuracy:.3f}mm")
+        
         if center_accuracy < 50:
             alignment_quality = "GOOD"
         elif center_accuracy < 200:
             alignment_quality = "ACCEPTABLE"
         else:
             alignment_quality = "NEEDS_IMPROVEMENT"
+        
         print(f"Alignment quality: {alignment_quality}")
         print("="*60)
-        return final_aligned
-
 
         #edited
         """final_center = final_aligned.get_center()
@@ -396,8 +384,11 @@ class AlignmentProcessor:
             print(f"Applying final center correction: {offset}")
             final_aligned = final_aligned.translate(offset)
             # CHECK again: now centers should be identical (within floating-point limits)!
-            print(f"New center after correction: {final_aligned.get_center()} vs ref {ref_center}")
-        return final_aligned"""
+            print(f"New center after correction: {final_aligned.get_center()} vs ref {ref_center}")"""
+        lower_by = 21.75
+        final_aligned.translate([0, 0, -lower_by])
+
+        return final_aligned
     
     def apply_complete_alignment_with_fixed_scaling(self, reference_pcd: o3d.geometry.PointCloud,
                                                    cleaned_inner_pcd: o3d.geometry.PointCloud,
