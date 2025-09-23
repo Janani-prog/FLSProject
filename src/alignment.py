@@ -148,7 +148,7 @@ class AlignmentProcessor:
                 print(f"Inner top surface Z: {inner_top_z:.1f}mm")
                 
                 #edited
-                lower_by = 21.75
+                lower_by = 55
                 height_adjustment = ref_top_z - inner_top_z - lower_by
                 translation = np.array([0, 0, height_adjustment])
                 
@@ -385,7 +385,7 @@ class AlignmentProcessor:
             final_aligned = final_aligned.translate(offset)
             # CHECK again: now centers should be identical (within floating-point limits)!
             print(f"New center after correction: {final_aligned.get_center()} vs ref {ref_center}")"""
-        lower_by = 21.75
+        lower_by = 55
         final_aligned.translate([0, 0, -lower_by])
 
         return final_aligned
