@@ -8,27 +8,41 @@ from config import ProcessingConfig
 
 #edited
 def manual_gap_xyz_alignment(reference_pcd, scan_pcd):
-    import numpy as np
-    import copy
-
+    """
+    Universally aligns scan_pcd to reference_pcd by:
+    1. Centering along X (using min/max average)
+    2. Aligning top surface along Z (using 95th percentile)
+    3. Equalizing left/right X-axis edge gaps
+    Returns a new, aligned point cloud.
+    """
     ref_pts = np.asarray(reference_pcd.points)
     scan_pts = np.asarray(scan_pcd.points)
 
-    # X-axis center (equal gaps left/right)
+    # Step 1: X-axis center alignment (min/max average)
     x_center_ref = (ref_pts[:, 0].min() + ref_pts[:, 0].max()) / 2
     x_center_scan = (scan_pts[:, 0].min() + scan_pts[:, 0].max()) / 2
     x_shift = x_center_ref - x_center_scan
 
-    # Z-axis top surface alignment (level at top)
+    # Step 2: Z-axis top surface alignment (95th percentile)
     ref_top_z = np.mean(ref_pts[ref_pts[:, 2] >= np.percentile(ref_pts[:, 2], 95)][:, 2])
     scan_top_z = np.mean(scan_pts[scan_pts[:, 2] >= np.percentile(scan_pts[:, 2], 95)][:, 2])
     z_shift = ref_top_z - scan_top_z
 
-    # Apply translation
+    # Apply center alignment
     new_pcd = copy.deepcopy(scan_pcd)
-    new_pcd = new_pcd.translate([x_shift, 0, z_shift])
+    new_pcd.translate([x_shift, 0, z_shift])
+
+    # Step 3: Edge gap equalization (X-axis)
+    aligned_pts = np.asarray(new_pcd.points)
+    ref_xmin, ref_xmax = ref_pts[:, 0].min(), ref_pts[:, 0].max()
+    scan_xmin, scan_xmax = aligned_pts[:, 0].min(), aligned_pts[:, 0].max()
+    left_gap = scan_xmin - ref_xmin
+    right_gap = ref_xmax - scan_xmax
+    x_shift_correction = (left_gap - right_gap) / 2.0
+    new_pcd.translate([-x_shift_correction, 0, 0])
 
     return new_pcd
+
 
 
 class AlignmentProcessor:
@@ -118,9 +132,9 @@ class AlignmentProcessor:
         
         return center_aligned_pcd
     
-    def apply_z_axis_alignment(self, reference_pcd: o3d.geometry.PointCloud,
+    """def apply_z_axis_alignment(self, reference_pcd: o3d.geometry.PointCloud,
                               center_aligned_pcd: o3d.geometry.PointCloud) -> o3d.geometry.PointCloud:
-        """Apply Z-axis alignment for mill surface positioning."""
+        
         print(f"\nApplying Z-axis surface alignment (old_version algorithm)...")
         
         try:
@@ -175,7 +189,7 @@ class AlignmentProcessor:
                 
         except Exception as e:
             print(f"Surface positioning failed: {e}")
-            return self._apply_fallback_z_alignment(reference_pcd, center_aligned_pcd)
+            return self._apply_fallback_z_alignment(reference_pcd, center_aligned_pcd)"""
     
     def _apply_fallback_z_alignment(self, reference_pcd: o3d.geometry.PointCloud,
                                    center_aligned_pcd: o3d.geometry.PointCloud) -> o3d.geometry.PointCloud:
@@ -354,8 +368,8 @@ class AlignmentProcessor:
         print("="*60)
         
         center_aligned = self.apply_center_alignment(reference_pcd, scaled_inner_pcd)
-        z_axis_aligned = self.apply_z_axis_alignment(reference_pcd, center_aligned)
-        z_axis_aligned = manual_gap_xyz_alignment(reference_pcd, z_axis_aligned)
+        #z_axis_aligned = self.apply_z_axis_alignment(reference_pcd, center_aligned)
+        z_axis_aligned = manual_gap_xyz_alignment(reference_pcd, center_aligned)
         axis_aligned = self.apply_pca_axis_alignment(reference_pcd, z_axis_aligned)
         final_aligned = self.apply_icp_refinement(reference_pcd, axis_aligned)
         
@@ -385,8 +399,8 @@ class AlignmentProcessor:
             final_aligned = final_aligned.translate(offset)
             # CHECK again: now centers should be identical (within floating-point limits)!
             print(f"New center after correction: {final_aligned.get_center()} vs ref {ref_center}")"""
-        lower_by = 55
-        final_aligned.translate([0, 0, -lower_by])
+        lower_by = 160
+        final_aligned.translate([0, -10, -lower_by])
 
         return final_aligned
     
